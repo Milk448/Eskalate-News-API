@@ -1,6 +1,8 @@
-# News API - Production-Ready Backend
+# News API — Production-Ready Backend
 
-A robust, scalable RESTful API built with Node.js, TypeScript, Express, and PostgreSQL. This API enables Authors to publish content and Readers to consume it, featuring a comprehensive Analytics Engine that tracks user engagement and processes view counts into daily reports.
+A robust, scalable RESTful API built with **Node.js**, **TypeScript**, **Express**, and **PostgreSQL**. Authors publish content; Readers consume it. A built-in Analytics Engine records high-frequency read events asynchronously and aggregates them into daily reports via a BullMQ job queue.
+
+> **Repository:** https://github.com/Milk448/Eskalate-News-API
 
 ## 📋 Table of Contents
 
@@ -19,15 +21,17 @@ A robust, scalable RESTful API built with Node.js, TypeScript, Express, and Post
 
 ## ✨ Features
 
-- 🔐 **JWT Authentication** - Secure token-based authentication with bcrypt password hashing
-- 👥 **Role-Based Access Control (RBAC)** - Separate permissions for Authors and Readers
-- 📝 **Article Management** - Full CRUD operations with soft deletion
-- 🔍 **Advanced Search & Filtering** - Search by category, author name, and keywords
-- 📊 **Analytics Engine** - Background job processing for daily view count aggregation
-- 🚀 **Asynchronous Processing** - BullMQ with Redis for high-performance event tracking
-- ✅ **Input Validation** - Zod schemas for runtime type validation
-- 🛡️ **Security Best Practices** - Helmet, CORS, rate limiting, no stack trace exposure
-- 📖 **Comprehensive API** - RESTful endpoints with standardized responses
+- 🔐 **JWT Authentication** — Secure token-based auth with bcrypt password hashing
+- 👥 **Role-Based Access Control (RBAC)** — Separate permissions for Authors and Readers
+- 📝 **Article Management** — Full CRUD with soft deletion (no data is permanently removed)
+- 🔍 **Advanced Search & Filtering** — Filter by category, partial author name, and title keywords
+- 📊 **Analytics Engine** — BullMQ job queue aggregates daily read counts into `DailyAnalytics`
+- 🚀 **Asynchronous Read Tracking** — Read events are queued fire-and-forget so article responses are never blocked
+- 🛑 **Duplicate-Read Throttling** — Redis-backed 60-second window prevents the same user/IP from flooding `ReadLog`
+- 🚦 **Rate Limiting** — `express-rate-limit` applied to auth (10 req/15 min) and API routes (100 req/15 min)
+- ✅ **Input Validation** — Centralized Zod schemas for all request bodies and query params
+- 🛡️ **Security Best Practices** — Helmet headers, CORS, no stack-trace exposure to clients
+- 📖 **Standardised Responses** — Every endpoint returns the same `{ Success, Message, Object, Errors }` envelope
 
 ## 🛠 Technology Stack
 
@@ -60,8 +64,8 @@ Before you begin, ensure you have the following installed:
 
 1. **Clone the repository**
    ```bash
-   git clone <your-repository-url>
-   cd news-api
+   git clone https://github.com/Milk448/Eskalate-News-API.git
+   cd Eskalate-News-API
    ```
 
 2. **Install dependencies**
@@ -76,19 +80,28 @@ Before you begin, ensure you have the following installed:
    
    Edit `.env` with your configuration (see [Environment Variables](#environment-variables))
 
-4. **Run database migrations**
+4. **Generate the Prisma client**
+   ```bash
+   npx prisma generate
+   ```
+
+5. **Run database migrations**
    ```bash
    npx prisma migrate dev
    ```
 
-5. **Seed the database (optional)**
+6. **Seed the database (optional)**
    ```bash
    npm run seed
    ```
 
 ## 🔐 Environment Variables
 
-Create a `.env` file in the root directory with the following variables:
+Copy the provided template and fill in your values:
+
+```bash
+cp .env.example .env
+```
 
 ```env
 # Application
@@ -107,6 +120,10 @@ REDIS_HOST=localhost
 REDIS_PORT=6379
 REDIS_PASSWORD=
 
+# Rate Limiting
+RATE_LIMIT_WINDOW_MS=900000   # 15 minutes in milliseconds
+RATE_LIMIT_MAX_REQUESTS=100   # requests per window (API routes)
+
 # CORS
 CORS_ORIGIN=*
 ```
@@ -115,15 +132,17 @@ CORS_ORIGIN=*
 
 | Variable | Description | Required | Default |
 |----------|-------------|----------|---------|
-| `NODE_ENV` | Environment mode (development/production/test) | No | development |
-| `PORT` | Server port | No | 3000 |
-| `DATABASE_URL` | PostgreSQL connection string | **Yes** | - |
-| `JWT_SECRET` | Secret key for JWT signing (min 32 chars) | **Yes** | - |
-| `JWT_EXPIRES_IN` | JWT token expiration time | No | 24h |
-| `REDIS_HOST` | Redis server host | No | localhost |
-| `REDIS_PORT` | Redis server port | No | 6379 |
-| `REDIS_PASSWORD` | Redis password (if required) | No | - |
-| `CORS_ORIGIN` | Allowed CORS origins | No | * |
+| `NODE_ENV` | Environment mode (`development`/`production`/`test`) | No | `development` |
+| `PORT` | Server port | No | `3000` |
+| `DATABASE_URL` | PostgreSQL connection string | **Yes** | — |
+| `JWT_SECRET` | Secret key for JWT signing (min 32 chars) | **Yes** | — |
+| `JWT_EXPIRES_IN` | JWT token expiration time | No | `24h` |
+| `REDIS_HOST` | Redis server host | No | `localhost` |
+| `REDIS_PORT` | Redis server port | No | `6379` |
+| `REDIS_PASSWORD` | Redis password (if required) | No | — |
+| `RATE_LIMIT_WINDOW_MS` | Rate-limit window in milliseconds | No | `900000` (15 min) |
+| `RATE_LIMIT_MAX_REQUESTS` | Max requests per window per IP (API routes) | No | `100` |
+| `CORS_ORIGIN` | Allowed CORS origins | No | `*` |
 
 ## 🗄 Database Setup
 
@@ -140,16 +159,16 @@ CREATE DATABASE news_api;
 \q
 ```
 
-### 2. Run Migrations
-
-```bash
-npx prisma migrate dev
-```
-
-### 3. Generate Prisma Client
+### 2. Generate Prisma Client
 
 ```bash
 npx prisma generate
+```
+
+### 3. Run Migrations
+
+```bash
+npx prisma migrate dev
 ```
 
 ### 4. (Optional) Seed Sample Data
@@ -158,7 +177,7 @@ npx prisma generate
 npm run seed
 ```
 
-This creates sample users and articles for testing.
+This creates sample users and articles for development/testing.
 
 ## ▶️ Running the Application
 
@@ -555,62 +574,73 @@ GET /health
 ## 📁 Project Structure
 
 ```
-news-api/
+Eskalate-News-API/
 ├── prisma/
-│   ├── migrations/          # Database migrations
-│   ├── schema.prisma        # Database schema definition
-│   └── seed.ts             # Database seeding script
+│   ├── schema.prisma        # Data models: User, Article, ReadLog, DailyAnalytics
+│   └── seed.ts              # Sample data seeding script
 ├── src/
-│   ├── config/             # Configuration files
-│   │   ├── database.ts     # Prisma client & soft delete middleware
-│   │   ├── env.ts          # Environment variable validation
-│   │   ├── logger.ts       # Winston logger configuration
-│   │   ├── queue.ts        # BullMQ queue setup
-│   │   └── redis.ts        # Redis client configuration
-│   ├── controllers/        # Request handlers
+│   ├── config/              # App-wide configuration
+│   │   ├── database.ts      # Prisma client + soft-delete middleware
+│   │   ├── env.ts           # Zod-validated environment variables
+│   │   ├── logger.ts        # Winston structured logger
+│   │   ├── queue.ts         # BullMQ queue definitions
+│   │   └── redis.ts         # ioredis client
+│   ├── controllers/         # HTTP request handlers (thin layer)
 │   │   ├── article.controller.ts
 │   │   ├── auth.controller.ts
 │   │   └── dashboard.controller.ts
-│   ├── jobs/               # Cron jobs
-│   │   └── analytics.cron.ts
-│   ├── middleware/         # Express middleware
-│   │   ├── auth.ts         # JWT authentication
-│   │   ├── errorHandler.ts # Global error handler
-│   │   └── rbac.ts         # Role-based access control
-│   ├── repositories/       # Data access layer
+│   ├── jobs/                # Scheduled tasks
+│   │   └── analytics.cron.ts  # Midnight GMT cron → queues aggregation job
+│   ├── middleware/          # Express middleware
+│   │   ├── __tests__/
+│   │   │   └── errorHandler.test.ts
+│   │   ├── auth.ts          # JWT authentication (+ optional auth)
+│   │   ├── errorHandler.ts  # Global error handler (no stack traces to clients)
+│   │   ├── rateLimiter.ts   # express-rate-limit (auth: 10/15 min, API: 100/15 min)
+│   │   └── rbac.ts          # Role-based access control
+│   ├── repositories/        # Data-access layer (Prisma queries)
 │   │   └── article.repository.ts
-│   ├── routes/             # API routes
+│   ├── routes/              # Express routers
 │   │   ├── article.routes.ts
 │   │   ├── auth.routes.ts
 │   │   └── dashboard.routes.ts
-│   ├── services/           # Business logic
-│   │   ├── analytics.service.ts
-│   │   ├── article.service.ts
-│   │   ├── auth.service.ts
-│   │   └── readLog.service.ts
-│   ├── types/              # TypeScript type definitions
+│   ├── services/            # Business logic
+│   │   ├── analytics.service.ts   # Daily aggregation + dashboard queries
+│   │   ├── article.service.ts     # Article CRUD + ownership checks
+│   │   ├── auth.service.ts        # Registration, login, JWT
+│   │   ├── readLog.service.ts     # Enqueues read events (fire-and-forget)
+│   │   └── readThrottle.service.ts # Redis 60-s window to deduplicate reads
+│   ├── types/               # Shared TypeScript interfaces & enums
 │   │   └── index.ts
-│   ├── utils/              # Utility functions
-│   │   └── response.ts     # Response formatters
-│   ├── validators/         # Zod validation schemas
+│   ├── utils/               # Pure helpers
+│   │   └── response.ts      # sendSuccess / sendError / sendPaginated
+│   ├── validators/          # Zod schemas (single source of truth)
 │   │   ├── article.validator.ts
 │   │   └── auth.validator.ts
-│   ├── workers/            # Background job workers
-│   │   ├── analytics.worker.ts
-│   │   └── readLog.worker.ts
-│   ├── __tests__/          # Test files
-│   │   ├── unit/
-│   │   └── properties/
-│   ├── app.ts              # Express app configuration
-│   └── server.ts           # Server entry point
-├── .env.example            # Environment variables template
-├── .eslintrc.json          # ESLint configuration
-├── .gitignore              # Git ignore rules
-├── .prettierrc             # Prettier configuration
-├── jest.config.js          # Jest testing configuration
-├── package.json            # Project dependencies
-├── tsconfig.json           # TypeScript configuration
-└── README.md               # This file
+│   ├── workers/             # BullMQ workers (run in same process)
+│   │   ├── analytics.worker.ts  # Processes analytics aggregation jobs
+│   │   └── readLog.worker.ts    # Persists ReadLog rows from queue
+│   ├── __tests__/           # Automated tests
+│   │   ├── helpers/
+│   │   │   └── prisma-mock.ts
+│   │   ├── integration/
+│   │   │   ├── article.http.test.ts
+│   │   │   ├── auth.enhanced.test.ts
+│   │   │   └── auth.http.test.ts
+│   │   ├── properties/
+│   │   │   ├── auth.properties.test.ts
+│   │   │   └── response.properties.test.ts
+│   │   └── unit/
+│   │       ├── auth.test.ts
+│   │       └── readThrottle.test.ts
+│   ├── app.ts               # createApp() — Express config, routes, error handler
+│   └── server.ts            # Entry point — DB connect, start server, start cron
+├── .env.example             # Environment variable template
+├── jest.config.js           # Jest + ts-jest configuration
+├── jest.setup.ts            # Injects test env vars before module load
+├── package.json
+├── tsconfig.json
+└── README.md
 ```
 
 ### Architecture Layers
@@ -667,14 +697,18 @@ Background Processing:
 
 #### 1. Soft Delete Implementation
 
-Articles are never permanently deleted. Instead, a `deletedAt` timestamp is set:
+Articles are never permanently deleted. Instead, a `deletedAt` timestamp is set, and a Prisma middleware automatically excludes those records from public-facing queries:
 
 ```typescript
-// Prisma middleware automatically filters deleted records
+// src/config/database.ts — runs on every findUnique / findMany for Article
 prisma.$use(async (params, next) => {
   if (params.model === 'Article') {
-    if (params.action === 'findMany' || params.action === 'findFirst') {
-      params.args.where = params.args.where || {};
+    if (params.action === 'findUnique') {
+      params.action = 'findFirst';
+      params.args.where = { ...params.args.where, deletedAt: null };
+    }
+    if (params.action === 'findMany') {
+      params.args.where = params.args.where ?? {};
       if (params.args.where.deletedAt === undefined) {
         params.args.where.deletedAt = null;
       }
@@ -686,33 +720,44 @@ prisma.$use(async (params, next) => {
 
 #### 2. Asynchronous Read Tracking
 
-Read events are tracked without blocking the article response:
+Read events are enqueued fire-and-forget so the article response is **never blocked**:
 
 ```typescript
-// Fire-and-forget pattern
-readLogService.trackRead(articleId, readerId).catch(err => {
-  logger.error('Failed to track read:', err);
-});
-// Response continues immediately
+// Controller — response is sent before the queue job completes
+readLogService.recordRead(articleId, readerId, ipAddress).catch(() => {});
+sendSuccess(res, 'Article retrieved successfully', article);
 ```
 
-#### 3. Daily Analytics Aggregation
+#### 3. Duplicate-Read Throttling (Bonus)
 
-A cron job runs at midnight GMT to aggregate analytics:
+To prevent a single user refreshing the page from flooding `ReadLog`, a Redis key with a 60-second TTL is set on the first read. Subsequent requests within the window are silently skipped:
+
+```
+Key: read:throttle:{articleId}:{userId|ipAddress}
+TTL: 60 seconds
+Strategy: SET … NX EX — atomic, fails-open if Redis is unavailable
+```
+
+#### 4. Daily Analytics Aggregation
+
+A `node-cron` job fires at midnight **GMT** every day, queuing a BullMQ job that groups `ReadLog` rows by `articleId + date` and upserts the result into `DailyAnalytics`:
 
 ```typescript
-// Runs daily at 00:00 GMT
+// src/jobs/analytics.cron.ts
 cron.schedule('0 0 * * *', async () => {
-  const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  await analyticsQueue.add('aggregate', { date: yesterday });
+  const yesterday = new Date();
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+  yesterday.setUTCHours(0, 0, 0, 0);
+  await analyticsQueue.add('aggregate-daily', { date: yesterday });
 }, { timezone: 'GMT' });
 ```
 
-#### 4. Role-Based Access Control
+#### 5. Role-Based Access Control
 
 ```typescript
 // Protect routes with RBAC middleware
 router.post('/articles',
+  apiRateLimiter,            // Rate limit
   authenticate,              // Verify JWT
   requireRole(Role.author),  // Check role
   articleController.create
@@ -736,23 +781,33 @@ npm run test:watch
 
 ### Testing Strategy
 
-1. **Unit Tests**: Test individual functions and methods
-2. **Property-Based Tests**: Test universal properties with fast-check
-3. **Integration Tests**: Test API endpoints with real database
+1. **Unit Tests** — Test individual service methods in isolation (mocked DB & Redis)
+2. **Integration Tests** — Full HTTP request/response cycle via `supertest` (mocked DB)
+3. **Property-Based Tests** — Verify universal invariants across thousands of generated inputs with `fast-check`
 
 ### Test Structure
 
 ```
-src/__tests__/
-├── unit/
-│   └── auth.test.ts
-├── properties/
-│   ├── auth.properties.test.ts
-│   └── response.properties.test.ts
-└── middleware/
-    └── __tests__/
-        └── errorHandler.test.ts
+src/
+├── middleware/
+│   └── __tests__/
+│       └── errorHandler.test.ts   # Error-handler middleware
+└── __tests__/
+    ├── helpers/
+    │   └── prisma-mock.ts
+    ├── integration/
+    │   ├── article.http.test.ts
+    │   ├── auth.enhanced.test.ts
+    │   └── auth.http.test.ts
+    ├── properties/
+    │   ├── auth.properties.test.ts
+    │   └── response.properties.test.ts
+    └── unit/
+        ├── auth.test.ts
+        └── readThrottle.test.ts
 ```
+
+> All database calls are mocked — **no live database or Redis is needed to run the test suite**.
 
 ## 💡 Technology Choices
 
@@ -800,7 +855,7 @@ src/__tests__/
 - ✅ **SQL Injection Prevention**: Prisma parameterized queries
 - ✅ **XSS Protection**: Helmet security headers
 - ✅ **CORS**: Configurable origin restrictions
-- ✅ **Rate Limiting**: Redis-based rate limiting (infrastructure ready)
+- ✅ **Rate Limiting**: `express-rate-limit` — 10 req/15 min on auth, 100 req/15 min on API routes
 - ✅ **No Stack Trace Exposure**: Errors logged but not sent to clients
 
 ## 📈 Performance Optimizations
@@ -808,23 +863,22 @@ src/__tests__/
 ### Database Indexes
 
 ```prisma
-@@index([status, deletedAt])  // Public article queries
-@@index([authorId])            // Author queries
-@@index([articleId, readAt])   // Analytics aggregation
-@@unique([articleId, date])    // Daily analytics constraint
+@@index([status, deletedAt])    // Public article feed (published + not deleted)
+@@index([authorId])              // Author's own article list
+@@index([articleId, readAt])     // Analytics aggregation window queries
+@@unique([articleId, date])      // DailyAnalytics upsert constraint
 ```
 
 ### Async Processing
 
-- Read tracking uses job queue (non-blocking)
-- Analytics aggregation runs in background
-- Separate worker processes
+- Read tracking uses a BullMQ job queue — **zero blocking** on the API response cycle
+- Analytics aggregation runs entirely in the background via a dedicated worker
+- Redis SCAN (non-blocking) used instead of KEYS for throttle statistics
 
 ### Pagination
 
-- All list endpoints support pagination
-- Prevents loading large datasets
-- Includes total count for UI
+- All list endpoints support `page` / `size` query parameters (default: page 1, size 10)
+- Every paginated response includes `TotalSize` for client-side pagination controls
 
 ## 🚀 Deployment
 
@@ -840,16 +894,16 @@ npm run build
 NODE_ENV=production npm start
 ```
 
-### Environment Checklist
+### Pre-Deploy Checklist
 
 - [ ] Set `NODE_ENV=production`
-- [ ] Use strong `JWT_SECRET` (32+ characters)
-- [ ] Configure `DATABASE_URL` for production database
-- [ ] Set up Redis instance
-- [ ] Configure `CORS_ORIGIN` to specific domains
-- [ ] Enable SSL/TLS for database connections
-- [ ] Set up logging aggregation
-- [ ] Configure monitoring and alerts
+- [ ] Use a strong, random `JWT_SECRET` (32+ characters)
+- [ ] Configure `DATABASE_URL` for production PostgreSQL
+- [ ] Provision a Redis instance and set `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD`
+- [ ] Set `CORS_ORIGIN` to your specific frontend domain(s)
+- [ ] Enable SSL/TLS for database and Redis connections
+- [ ] Set up log aggregation (Winston writes to `logs/combined.log` and `logs/error.log`)
+- [ ] Configure uptime monitoring and alerting
 
 ## 📝 License
 
@@ -857,8 +911,4 @@ MIT
 
 ## 👤 Author
 
-Built for the A2SV Eskalate Backend Assessment
-
----
-
-**Note**: This is a production-ready implementation demonstrating best practices in backend development, including security, scalability, testing, and documentation.
+Built for the A2SV Eskalate Backend Assessment — demonstrating production-grade Node.js practices: security, async processing, testing, and clean architecture.
