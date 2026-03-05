@@ -1,3 +1,14 @@
+/**
+ * Environment Variable Configuration
+ *
+ * Loads `.env` via dotenv, then validates every variable against a strict Zod
+ * schema before the application boots.  If any required variable is missing or
+ * malformed the process exits immediately with a descriptive error so the
+ * misconfiguration is caught at startup rather than at runtime.
+ *
+ * Exported `env` object provides type-safe access to all environment variables
+ * with sensible defaults already applied.
+ */
 import dotenv from 'dotenv';
 import { z } from 'zod';
 

@@ -1,3 +1,24 @@
+/**
+ * Logger Configuration
+ *
+ * Creates and exports a singleton Winston logger instance used across the
+ * entire application for structured, levelled logging.
+ *
+ * Log levels:
+ * - **production**: `info` and above (warn, error) are recorded; debug/verbose
+ *   messages are suppressed to keep logs lean in production environments.
+ * - **development / test**: `debug` and above are recorded so developers can
+ *   see detailed query traces and application internals.
+ *
+ * Transports:
+ * - `logs/error.log`    – error-level messages only.
+ * - `logs/combined.log` – all messages at the configured level and above.
+ * - **Console** (non-production only) – colourised, human-readable output.
+ *
+ * Every log entry includes a timestamp and the service name `news-api` as
+ * default metadata, making it easy to filter entries in aggregated log
+ * pipelines.
+ */
 import winston from 'winston';
 
 const logger = winston.createLogger({
