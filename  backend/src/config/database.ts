@@ -1,3 +1,17 @@
+/**
+ * Database Configuration
+ *
+ * Creates and exports a singleton PrismaClient instance used throughout the application
+ * to interact with the PostgreSQL database.
+ *
+ * Key behaviours:
+ * - In development mode all SQL queries and their durations are logged via Winston.
+ * - A Prisma middleware intercepts every `Article` query and automatically appends
+ *   `deletedAt: null` so that soft-deleted articles are transparent to the rest of
+ *   the codebase (i.e. code never sees deleted records unless it explicitly asks for
+ *   them by passing `deletedAt` in the where clause).
+ * - The connection is closed gracefully when the Node.js process is about to exit.
+ */
 import { PrismaClient } from '@prisma/client';
 import logger from './logger';
 
